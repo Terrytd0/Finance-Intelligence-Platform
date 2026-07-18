@@ -116,8 +116,10 @@ Finance-Intelligence-Platform/
 │
 ├── docs/
 │   ├── architecture.md
+│   ├── assumptions_and_open_questions.md
 │   ├── business_requirements.md
 │   ├── decisions.md
+│   ├── design_review.md
 │   └── screenshots/
 │
 ├── workflows/
