@@ -113,6 +113,8 @@ Finance-Intelligence-Platform/
 ├── CLAUDE.md
 ├── LICENSE
 ├── .gitignore
+├── requirements.txt
+├── conftest.py
 │
 ├── docs/
 │   ├── architecture.md
@@ -120,7 +122,45 @@ Finance-Intelligence-Platform/
 │   ├── business_requirements.md
 │   ├── decisions.md
 │   ├── design_review.md
+│   ├── data_schema.md
+│   ├── Explainer.md
+│   ├── validation_rules.md
 │   └── screenshots/
+│
+├── data/
+│   ├── raw/
+│   │   ├── transactions.csv
+│   │   ├── transactions.xlsx
+│   │   └── clients.csv
+│   │
+│   ├── processed/
+│   │
+│   └── sample/
+│       ├── valid_transactions.csv
+│       ├── duplicate_transactions.csv
+│       ├── missing_values.csv
+│       ├── invalid_data.csv
+│       ├── lowercase_currency.csv
+│       └── whitespace_values.csv
+│
+├── src/
+│   ├── __init__.py
+│   ├── ingestion/
+│   │   ├──  __init__.py
+│   │   ├── reader.py
+│   │   ├── validator.py
+│   │   ├── cleaner.py
+│   │   ├── deduplicator.py
+│   │   └── pipeline.py
+│   │
+│   ├── analytics/
+│   │
+│   └── models/
+│       ├──  __init__.py
+│       └── financial_schema.py
+│
+├── tests/
+│   └── test_ingestion.py
 │
 ├── workflows/
 │
@@ -128,4 +168,13 @@ Finance-Intelligence-Platform/
 │
 └── examples/
 ```
+
+The `src/ingestion` pipeline (Read → Validate → Clean → Deduplicate) is a
+concrete, testable implementation of the Validation and Cleaning stages
+described above, and the sample data under `data/sample/` doubles as its
+test fixtures — see [`docs/data_schema.md`](docs/data_schema.md) and
+[`docs/validation_rules.md`](docs/validation_rules.md) for the contract it
+implements. Excel files are read with `openpyxl` (see `requirements.txt`),
+so it handles real-world `.xlsx` edge cases — formulas, merged cells,
+hidden sheets — rather than a hand-rolled parser.
 

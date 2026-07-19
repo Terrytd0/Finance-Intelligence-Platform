@@ -1,0 +1,4 @@
+transaction_id,client_id,date,category,description,amount,currency
+T2001,C001,2026-01-05,revenue,Q1 advisory fee,125000.00,USD
+T2002,C001,2026-01-12,expense,Office lease,-8500.00,USD
+T2001,C001,2026-01-05,revenue,Q1 advisory fee,125000.00,USD

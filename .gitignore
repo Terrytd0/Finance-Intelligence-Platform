@@ -16,6 +16,11 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
+
+# Processed data output
+/data/processed/*
+!/data/processed/.gitkeep
 
 # Node
 node_modules/

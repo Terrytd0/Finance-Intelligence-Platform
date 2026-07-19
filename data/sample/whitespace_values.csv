@@ -1,0 +1,2 @@
+transaction_id,client_id,date,category,description,amount,currency
+T1001,C001,2026-01-05,revenue,   Salary payment   ,1000, usd
