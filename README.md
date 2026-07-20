@@ -85,11 +85,12 @@ Version 1 of the platform processes:
 
 ## Key Features
 
-- Automated spreadsheet ingestion
-- Intelligent validation
-- Financial KPI engine
-- AI anomaly detection
-- Executive summary generation
+- Automated spreadsheet ingestion (`src/ingestion/`)
+- Intelligent validation (`src/ingestion/validator.py`)
+- Financial KPI engine (`src/analytics/kpi_engine.py`)
+- AI anomaly detection (`src/ai/anomaly_detector.py`)
+- Executive summary generation (`src/ai/prompt_builder.py` +
+  `anomaly_detector.py`)
 - Audit trail
 - Email & Slack notifications
 - Scalable workflow architecture
@@ -154,13 +155,22 @@ Finance-Intelligence-Platform/
 │   │   └── pipeline.py
 │   │
 │   ├── analytics/
+│   │   ├── __init__.py
+│   │   └── kpi_engine.py
+│   │
+│   ├── ai/
+│   │   ├── prompt_builder.py
+│   │   └── anomaly_detector.py
 │   │
 │   └── models/
 │       ├──  __init__.py
 │       └── financial_schema.py
 │
 ├── tests/
-│   └── test_ingestion.py
+│   ├── test_ingestion.py
+│   ├── test_kpi_engine.py
+│   ├── test_prompt_builder.py
+│   └── test_anomaly_detector.py
 │
 ├── workflows/
 │
@@ -177,4 +187,35 @@ test fixtures — see [`docs/data_schema.md`](docs/data_schema.md) and
 implements. Excel files are read with `openpyxl` (see `requirements.txt`),
 so it handles real-world `.xlsx` edge cases — formulas, merged cells,
 hidden sheets — rather than a hand-rolled parser.
+
+## Analytics & AI Reporting Layer
+
+Once transactions are ingested and cleaned, two further stages compute the
+KPI Calculation and AI-assisted Anomaly Detection / Executive Reporting
+steps from the pipeline above:
+
+- **`src/analytics/kpi_engine.py`** — deterministic, non-AI KPI
+  calculations (`generate_kpis`). Computes total revenue, total expenses,
+  net profit, revenue by client, expenses by category, monthly totals, and
+  the largest transactions from a batch of validated `Transaction` records.
+  Every figure here is reproducible from the transaction data alone, which
+  keeps the numbers the AI layer reasons over auditable.
+- **`src/ai/prompt_builder.py`** — formats a `FinancialKPIs` snapshot and
+  the underlying transactions into a structured prompt
+  (`build_anomaly_prompt`). It performs no calculations of its own; it only
+  renders figures already computed by the KPI engine, and instructs the
+  model to reason solely from the supplied data rather than inventing or
+  recomputing numbers.
+- **`src/ai/anomaly_detector.py`** — sends that prompt to an injected
+  `LLMClient` (a small `Protocol`, so the module has no dependency on any
+  specific provider), then parses and validates the JSON response into
+  typed `FinancialAnomaly` / `AnomalyReport` dataclasses. Malformed or
+  schema-invalid responses raise `LLMResponseError` rather than being
+  silently accepted, so downstream reporting can trust the shape of an
+  `AnomalyReport`.
+
+This split — deterministic math in `analytics/`, everything AI-facing in
+`ai/` — keeps KPI figures explainable and independently testable, while
+containing prompt/response handling (and the risk of model
+hallucination) to a single, narrow boundary.
 
