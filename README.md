@@ -67,10 +67,17 @@ to keep the process traceable end to end.
 
 ## Technology Stack
 
-_To be finalized and recorded in [`docs/decisions.md`](docs/decisions.md) as
-architecture decisions are made. Stack choices should be evaluated against
-the reliability, explainability, and scalability needs above before being
-locked in._
+_Full stack decisions and their trade-offs are recorded in
+[`docs/decisions.md`](docs/decisions.md) as they're made. What's locked in
+so far, driven directly by what's implemented in `src/`:_
+
+- **FastAPI** (`src/api/`) — HTTP entry point into the pipeline.
+- **OpenAI Python SDK** (`src/ai/openai_client.py`) — the concrete LLM
+  provider behind anomaly detection; swappable, since `src/ai/anomaly_detector.py`
+  only depends on the provider-agnostic `LLMClient` protocol.
+- **openpyxl** — `.xlsx` ingestion.
+- Everything else (storage, notifications, hosting) remains open per
+  `docs/decisions.md`.
 
 ## Supported Financial Data
 
@@ -91,6 +98,13 @@ Version 1 of the platform processes:
 - AI anomaly detection (`src/ai/anomaly_detector.py`)
 - Executive summary generation (`src/ai/prompt_builder.py` +
   `anomaly_detector.py`)
+- Production HTTP API (`src/api/`) — `POST /analyze` runs an uploaded CSV
+  through the full pipeline end-to-end and returns the `AnomalyReport` as JSON
+- OpenAI-backed LLM client with exponential-backoff retries on transient
+  failures (`src/ai/openai_client.py`)
+- Structured JSON error responses with no raw tracebacks exposed
+  (`src/api/errors.py`)
+- Console + rotating file logging (`src/logging_config.py`)
 - Audit trail
 - Email & Slack notifications
 - Scalable workflow architecture
@@ -146,6 +160,9 @@ Finance-Intelligence-Platform/
 │
 ├── src/
 │   ├── __init__.py
+│   ├── config.py
+│   ├── logging_config.py
+│   │
 │   ├── ingestion/
 │   │   ├──  __init__.py
 │   │   ├── reader.py
@@ -160,7 +177,14 @@ Finance-Intelligence-Platform/
 │   │
 │   ├── ai/
 │   │   ├── prompt_builder.py
-│   │   └── anomaly_detector.py
+│   │   ├── anomaly_detector.py
+│   │   └── openai_client.py
+│   │
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   ├── errors.py
+│   │   └── schemas.py
 │   │
 │   └── models/
 │       ├──  __init__.py
@@ -170,7 +194,15 @@ Finance-Intelligence-Platform/
 │   ├── test_ingestion.py
 │   ├── test_kpi_engine.py
 │   ├── test_prompt_builder.py
-│   └── test_anomaly_detector.py
+│   ├── test_anomaly_detector.py
+│   ├── test_openai_client.py
+│   └── test_api.py
+│
+├── logs/                  (generated at runtime, gitignored)
+│
+├── n8n/
+│   ├── README.md
+│   └── Finance-Intelligence-Pipeline.json
 │
 ├── workflows/
 │
@@ -218,4 +250,59 @@ This split — deterministic math in `analytics/`, everything AI-facing in
 `ai/` — keeps KPI figures explainable and independently testable, while
 containing prompt/response handling (and the risk of model
 hallucination) to a single, narrow boundary.
+
+## Production API Layer
+
+`src/api/` puts the whole pipeline behind HTTP, orchestrating the existing
+ingestion, analytics, and AI modules without duplicating any of their logic:
+
+```
+CSV → FastAPI → Pipeline → KPI Engine → Prompt Builder →
+OpenAILLMClient → OpenAI → Anomaly Detector → JSON Response
+```
+
+- **`GET /health`** — liveness check, returns `{"status": "ok"}`.
+- **`POST /analyze`** — accepts an uploaded `.csv` file, runs it through
+  `run_pipeline()` → `generate_kpis()` → `generate_anomaly_report()`
+  unchanged, and returns the resulting `AnomalyReport` as JSON
+  (`src/api/schemas.py`).
+- **`src/ai/openai_client.py`** — `OpenAILLMClient`, the concrete
+  implementation of the `LLMClient` protocol `anomaly_detector.py` expects.
+  Retries transient network/API failures (connection errors, timeouts, rate
+  limits, 5xx) with exponential backoff; non-retryable errors and malformed
+  responses raise immediately.
+- **`src/config.py`** — all tunables (OpenAI model, timeout, temperature,
+  retry count, log level) read from environment variables, no hardcoded
+  secrets.
+- **`src/logging_config.py`** — console + rotating file logging
+  (`logs/app.log`) with a consistent timestamp/level/module/message format.
+- **`src/api/errors.py`** — every failure mode (bad upload, unreadable CSV,
+  validation failure, malformed LLM response, OpenAI failure/timeout,
+  missing config, or anything unexpected) is caught and returned as
+  `{"error": "<Type>", "message": "<detail>"}` with an appropriate HTTP
+  status code — never a raw Python traceback.
+
+See [`docs/Explainer.md`](docs/Explainer.md) (2026-07-21 update) for the
+full error-mapping table and design rationale.
+
+## Workflow Orchestration (n8n)
+
+Per [ADR-001](docs/decisions.md), n8n is the orchestration platform sitting
+in front of the FastAPI backend, implementing the Notifications and Audit
+Logging stages from the Proposed Solution above:
+
+- **`n8n/Finance-Intelligence-Pipeline.json`** — the importable workflow. A
+  `Webhook` trigger calls the FastAPI `/analyze` endpoint (`HTTP Request`
+  node), then a `Switch` routes on the returned anomaly severity
+  (low/medium/high/critical) to per-severity Airtable "Archive Report" and
+  "Update Audit Trail" nodes, plus Slack/Email notification nodes; a
+  separate failure branch archives and audits processing errors instead of
+  silently dropping them.
+- **`n8n/README.md`** — import instructions and requirements: n8n v2.x, the
+  FastAPI backend reachable at `http://host.docker.internal:8000` (i.e.
+  `src/api/main.py` running via `uvicorn`), plus configured Airtable, Slack,
+  and Email credentials.
+
+This workflow is the consumer of the API layer above — `src/api/` and
+`n8n/` are designed to be run together, not as alternatives.
 

@@ -1,1 +1,12 @@
 openpyxl>=3.1
+
+# API layer
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart>=0.0.12
+
+# OpenAI integration
+openai>=1.50
+
+# Test dependencies (FastAPI TestClient requires httpx)
+httpx>=0.27

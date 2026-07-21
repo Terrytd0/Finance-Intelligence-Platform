@@ -1,0 +1,2228 @@
+{
+  "name": "Finance Intelligence Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "finance-upload",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "01c8a9d3-70fc-40d2-8158-dee6630ced40",
+      "name": "Webhook",
+      "webhookId": "e0853fcc-bb34-4b9e-8470-97c4248a1d12"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/analyze",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "file"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "b0829de4-ca42-4a21-9b59-c3b1f4708863",
+      "name": "HTTP Request",
+      "alwaysOutputData": false,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.highestSeverity }}",
+                    "rightValue": "critical",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ff99d860-c7a4-4e65-a9c1-0581b967e65a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Critical"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c5d73ee5-89fd-458d-bccc-0db3dba9bdee",
+                    "leftValue": "={{ $json.highestSeverity }}",
+                    "rightValue": "high",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "High"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "97dfd9c6-cf5b-4561-acc3-ef9b1a1e415e",
+                    "leftValue": "={{ $json.highestSeverity }}",
+                    "rightValue": "medium",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Medium"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "bda6df63-0f81-48b8-9961-65f4c52fef51",
+                    "leftValue": "={{ $json.highestSeverity }}",
+                    "rightValue": "low",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Low"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        688,
+        -128
+      ],
+      "id": "96e490c5-f0bb-4dde-a30d-7785fd86ea3c",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "jsCode": "const priority = {\n  low: 1,\n  medium: 2,\n  high: 3,\n  critical: 4\n};\n\nconst anomalies = $json.anomalies ?? [];\n\nlet highest = \"low\";\n\nfor (const anomaly of anomalies) {\n  if (priority[anomaly.severity] > priority[highest]) {\n    highest = anomaly.severity;\n  }\n}\n\nreturn [\n  {\n    json: {\n      ...$json,\n      highestSeverity: highest\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -128
+      ],
+      "id": "cc393823-39b3-488a-b123-297a746d9e09",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "USLACKBOT",
+          "mode": "list",
+          "cachedResultName": "slackbot"
+        },
+        "text": "=🚨 CRITICAL FINANCIAL ALERT 🚨  The Finance Intelligence Platform has detected one or more critical financial anomalies requiring immediate attention.  Summary: {{$json.executive_summary}}  Highest Severity: {{$json.highestSeverity}} Total Anomalies: {{$json.anomalies.length}} Generated At: {{$json.generated_at}}  Please review the full report in Airtable and begin investigation immediately.",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1488,
+        -336
+      ],
+      "id": "be4003b4-eeac-44d2-9340-db5c9cb3a3c2",
+      "name": "Send a message",
+      "webhookId": "191d41ea-a80a-49b5-877f-61575a48ce43",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "R7JqpkxyZiWjUePh",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "terrynyirenda123@gmail.com",
+        "toEmail": "terrytheedude0@gmail.com",
+        "subject": "🚨 Critical Financial Alert - Immediate Action Required",
+        "html": "=<h2>🚨 Critical Financial Alert</h2>\n\n<p>The Finance Intelligence Platform has detected one or more Critical financial anomalies requiring immediate attention.</p>\n\n<h3>Executive Summary</h3>\n\n<p>{{ $json.executive_summary }}</p>\n\n<h3>Report Details</h3>\n\n<ul>\n  <li><strong>Highest Severity:</strong> {{ $json.highestSeverity }}</li>\n  <li><strong>Total Anomalies:</strong> {{ $json.anomalies.length }}</li>\n  <li><strong>Generated At:</strong> {{ $json.generated_at }}</li>\n</ul>\n\n<h3>Detected Anomalies</h3>\n\n{{ $json.anomalies.map(a => `\n<hr>\n<p><strong>Severity:</strong> ${a.severity}</p>\n<p><strong>Title:</strong> ${a.title}</p>\n<p><strong>Description:</strong><br>${a.description}</p>\n<p><strong>Evidence:</strong><br>${a.evidence}</p>\n<p><strong>Recommendation:</strong><br>${a.recommendation}</p>\n`).join('') }}\n\n<p>Please investigate these findings immediately.</p>\n\n<p>Regards,<br>Finance Intelligence Platform</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1296,
+        -336
+      ],
+      "id": "434251fd-12d7-44d2-af18-d8a1c7ca6e77",
+      "name": "Send an Email",
+      "webhookId": "ab705709-9a50-480a-9fc8-0ccfc07323d5",
+      "credentials": {
+        "smtp": {
+          "id": "w4fOkMvYqWIxFAOo",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "terrynyirenda123@gmail.com",
+        "toEmail": "terrytheedude0@gmail.com",
+        "subject": "High Severity Financial Report Available",
+        "html": "=<h2>🚨 Critical Financial Alert</h2>\n\n<p>The Finance Intelligence Platform has detected one or more High financial anomalies requiring immediate attention.</p>\n\n<h3>Executive Summary</h3>\n\n<p>{{ $json.executive_summary }}</p>\n\n<h3>Report Details</h3>\n\n<ul>\n  <li><strong>Highest Severity:</strong> {{ $json.highestSeverity }}</li>\n  <li><strong>Total Anomalies:</strong> {{ $json.anomalies.length }}</li>\n  <li><strong>Generated At:</strong> {{ $json.generated_at }}</li>\n</ul>\n\n<h3>Detected Anomalies</h3>\n\n{{ $json.anomalies.map(a => `\n<hr>\n<p><strong>Severity:</strong> ${a.severity}</p>\n<p><strong>Title:</strong> ${a.title}</p>\n<p><strong>Description:</strong><br>${a.description}</p>\n<p><strong>Evidence:</strong><br>${a.evidence}</p>\n<p><strong>Recommendation:</strong><br>${a.recommendation}</p>\n`).join('') }}\n\n<p>Please investigate these findings immediately.</p>\n\n<p>Regards,<br>Finance Intelligence Platform</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1296,
+        -160
+      ],
+      "id": "8b31fae4-b957-4eee-86f8-d74db8a85975",
+      "name": "Send an Email1",
+      "webhookId": "ab705709-9a50-480a-9fc8-0ccfc07323d5",
+      "alwaysOutputData": true,
+      "credentials": {
+        "smtp": {
+          "id": "w4fOkMvYqWIxFAOo",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appt4cu3vhAZbEuzd",
+          "mode": "list",
+          "cachedResultName": "Finance Intelligence Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblEoNbUmh5wcD9mP",
+          "mode": "list",
+          "cachedResultName": "Analysis Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd/tblEoNbUmh5wcD9mP"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Anomaly Count": "={{ $json.anomalies.length }}",
+            "Highest Severity": "={{ $json.highestSeverity.charAt(0).toUpperCase() + $json.highestSeverity.slice(1) }}",
+            "Executive Summary": "={{ $json.executive_summary }}",
+            "Detailed Findings": "={{ \"Finance Intelligence Report\\n\\n\" + \"Highest Severity: \" + $json.highestSeverity + \"\\n\" + \"Total Anomalies: \" + $json.anomalies.length + \"\\n\\n\" + \"==================================================\\n\\n\" +  $json.anomalies.map(a => `Severity: ${a.severity} Title: ${a.title} Description: ${a.description} Evidence: ${a.evidence} Recommendation: ${a.recommendation}` ).join('\\n\\n==================================================\\n\\n') }}",
+            "Status": "Processed",
+            "Source": "Webhook",
+            "Workflow Version": "v1.0",
+            "Ai Generated At": "={{ $json.generated_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Report ID",
+              "displayName": "Report ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Ai Generated At",
+              "displayName": "Ai Generated At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Highest Severity",
+              "displayName": "Highest Severity",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Low",
+                  "value": "Low"
+                },
+                {
+                  "name": "Medium",
+                  "value": "Medium"
+                },
+                {
+                  "name": "High",
+                  "value": "High"
+                },
+                {
+                  "name": "Critical",
+                  "value": "Critical"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Executive Summary",
+              "displayName": "Executive Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Anomaly Count",
+              "displayName": "Anomaly Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Detailed Findings",
+              "displayName": "Detailed Findings",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Processed",
+                  "value": "Processed"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Created",
+              "displayName": "Created",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Attachment Summary",
+              "displayName": "Attachment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Workflow Version",
+              "displayName": "Workflow Version",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        928,
+        -160
+      ],
+      "id": "d670647a-2ec2-452b-b4bf-0cdef905823a",
+      "name": "Archive Report: High Severity",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "l0ZeudbfWkzyXQJW",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appt4cu3vhAZbEuzd",
+          "mode": "list",
+          "cachedResultName": "Finance Intelligence Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblEoNbUmh5wcD9mP",
+          "mode": "list",
+          "cachedResultName": "Analysis Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd/tblEoNbUmh5wcD9mP"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Anomaly Count": "={{ $json.anomalies.length }}",
+            "Highest Severity": "={{ $json.highestSeverity.charAt(0).toUpperCase() + $json.highestSeverity.slice(1) }}",
+            "Executive Summary": "={{ $json.executive_summary }}",
+            "Detailed Findings": "={{ \"Finance Intelligence Report\\n\\n\" + \"Highest Severity: \" + $json.highestSeverity + \"\\n\" + \"Total Anomalies: \" + $json.anomalies.length + \"\\n\\n\" + \"==================================================\\n\\n\" +  $json.anomalies.map(a => `Severity: ${a.severity} Title: ${a.title} Description: ${a.description} Evidence: ${a.evidence} Recommendation: ${a.recommendation}` ).join('\\n\\n==================================================\\n\\n') }}",
+            "Status": "Processed",
+            "Source": "Webhook",
+            "Workflow Version": "v1.0",
+            "Ai Generated At": "={{ $json.generated_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Report ID",
+              "displayName": "Report ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Ai Generated At",
+              "displayName": "Ai Generated At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Highest Severity",
+              "displayName": "Highest Severity",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Low",
+                  "value": "Low"
+                },
+                {
+                  "name": "Medium",
+                  "value": "Medium"
+                },
+                {
+                  "name": "High",
+                  "value": "High"
+                },
+                {
+                  "name": "Critical",
+                  "value": "Critical"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Executive Summary",
+              "displayName": "Executive Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Anomaly Count",
+              "displayName": "Anomaly Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Detailed Findings",
+              "displayName": "Detailed Findings",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Processed",
+                  "value": "Processed"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Created",
+              "displayName": "Created",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Attachment Summary",
+              "displayName": "Attachment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Workflow Version",
+              "displayName": "Workflow Version",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        928,
+        -336
+      ],
+      "id": "a8cc6da9-ca0b-4a35-a781-5043f31fa969",
+      "name": "Archive Report: Critical Severity",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "l0ZeudbfWkzyXQJW",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "USLACKBOT",
+          "mode": "list",
+          "cachedResultName": "slackbot"
+        },
+        "text": "=🚨 ALERT 🚨: A CSV upload could not be processed.\n\nStatus Code:\n422\n\nError:\nValidationFailedError\n\nMessage:\n{{$json.body.message}}\n\nPlease review the uploaded file and correct any formatting or validation issues before resubmitting.",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1120,
+        400
+      ],
+      "id": "f39360d2-2f01-4618-999f-670053e9b63f",
+      "name": "Send a message1",
+      "webhookId": "191d41ea-a80a-49b5-877f-61575a48ce43",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "R7JqpkxyZiWjUePh",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "terrynyirenda123@gmail.com",
+        "toEmail": "terrytheedude0@gmail.com",
+        "subject": "Finance Intelligence Platform - Upload Validation Failed",
+        "emailFormat": "text",
+        "text": "=A CSV upload could not be processed.\n\nStatus Code:\n422\n\nError:\nValidationFailedError\n\nMessage:\n{{$json.body.message}}\n\nPlease review the uploaded file and correct any formatting or validation issues before resubmitting.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        928,
+        400
+      ],
+      "id": "388ddbd2-21c3-4aac-b3c8-0386bd8a69e7",
+      "name": "Send an Email2",
+      "webhookId": "ab705709-9a50-480a-9fc8-0ccfc07323d5",
+      "credentials": {
+        "smtp": {
+          "id": "w4fOkMvYqWIxFAOo",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appt4cu3vhAZbEuzd",
+          "mode": "list",
+          "cachedResultName": "Finance Intelligence Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblaCI9FVDMNvAtwu",
+          "mode": "list",
+          "cachedResultName": "Processing Failures",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd/tblaCI9FVDMNvAtwu"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Workflow Version": "v1.0",
+            "Status Code": "={{ $json.error.status }}",
+            "Error Type": "={{ $json.error.name }}",
+            "Source": "={{ $('Webhook').item.json.headers['user-agent'] }}",
+            "Raw Response": "={{ JSON.stringify($json, null, 2) }}",
+            "Resolution Status": "Unknown"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Failure ID",
+              "displayName": "Failure ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Created",
+              "displayName": "Created",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Workflow Version",
+              "displayName": "Workflow Version",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status Code",
+              "displayName": "Status Code",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Error Type",
+              "displayName": "Error Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Raw Response",
+              "displayName": "Raw Response",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Resolution Status",
+              "displayName": "Resolution Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Attachment Summary",
+              "displayName": "Attachment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        528,
+        400
+      ],
+      "id": "987a7478-8fec-48cb-aaeb-6be9177d33fa",
+      "name": "Archive Report: Processing Failures",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "l0ZeudbfWkzyXQJW",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appt4cu3vhAZbEuzd",
+          "mode": "list",
+          "cachedResultName": "Finance Intelligence Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblidPi1k5f7MacW1",
+          "mode": "list",
+          "cachedResultName": "Audit Trail",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd/tblidPi1k5f7MacW1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Event": "Validation failed",
+            "Status": "Failed",
+            "Details": "={{ $('HTTP Request').item.json.error.stack }}",
+            "Source": "={{ $('Webhook').item.json.headers['user-agent'] }}",
+            "Workflow Version": "v1.0"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Audit ID",
+              "displayName": "Audit ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Event",
+              "displayName": "Event",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Success",
+                  "value": "Success"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                },
+                {
+                  "name": "Warning",
+                  "value": "Warning"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Details",
+              "displayName": "Details",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Workflow Version",
+              "displayName": "Workflow Version",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Attachment Summary",
+              "displayName": "Attachment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        736,
+        400
+      ],
+      "id": "acaae9c8-07d0-4522-84cd-9efc77810f3f",
+      "name": "Update Audit Trail: Fail",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "l0ZeudbfWkzyXQJW",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appt4cu3vhAZbEuzd",
+          "mode": "list",
+          "cachedResultName": "Finance Intelligence Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblidPi1k5f7MacW1",
+          "mode": "list",
+          "cachedResultName": "Audit Trail",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd/tblidPi1k5f7MacW1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Event": "Analysis Completed",
+            "Status": "Warning",
+            "Details": "={{ $('Switch').item.json.anomalies.length }} anomalies detected",
+            "Source": "={{ $('Webhook').item.json.headers['user-agent'] }}",
+            "Workflow Version": "v1.0"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Audit ID",
+              "displayName": "Audit ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Event",
+              "displayName": "Event",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Success",
+                  "value": "Success"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                },
+                {
+                  "name": "Warning",
+                  "value": "Warning"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Details",
+              "displayName": "Details",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Workflow Version",
+              "displayName": "Workflow Version",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Attachment Summary",
+              "displayName": "Attachment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        -336
+      ],
+      "id": "ed33bf81-fde5-4b8b-9f3e-70c5164805b3",
+      "name": "Update Audit Trail: Critical Severity",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "l0ZeudbfWkzyXQJW",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appt4cu3vhAZbEuzd",
+          "mode": "list",
+          "cachedResultName": "Finance Intelligence Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblidPi1k5f7MacW1",
+          "mode": "list",
+          "cachedResultName": "Audit Trail",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd/tblidPi1k5f7MacW1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Event": "Analysis Completed",
+            "Status": "Warning",
+            "Details": "={{ $('Switch').item.json.anomalies.length }} anomalies detected",
+            "Source": "={{ $('Webhook').item.json.headers['user-agent'] }}",
+            "Workflow Version": "v1.0"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Audit ID",
+              "displayName": "Audit ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Event",
+              "displayName": "Event",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Success",
+                  "value": "Success"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                },
+                {
+                  "name": "Warning",
+                  "value": "Warning"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Details",
+              "displayName": "Details",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Workflow Version",
+              "displayName": "Workflow Version",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Attachment Summary",
+              "displayName": "Attachment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        -160
+      ],
+      "id": "5421439e-9f49-4a1b-9fd7-9e08d5b15f4d",
+      "name": "Update Audit Trail: High Severity",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "l0ZeudbfWkzyXQJW",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appt4cu3vhAZbEuzd",
+          "mode": "list",
+          "cachedResultName": "Finance Intelligence Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblEoNbUmh5wcD9mP",
+          "mode": "list",
+          "cachedResultName": "Analysis Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd/tblEoNbUmh5wcD9mP"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Anomaly Count": "={{ $json.anomalies.length }}",
+            "Highest Severity": "={{ $json.highestSeverity.charAt(0).toUpperCase() + $json.highestSeverity.slice(1) }}",
+            "Executive Summary": "={{ $json.executive_summary }}",
+            "Detailed Findings": "={{ \"Finance Intelligence Report\\n\\n\" + \"Highest Severity: \" + $json.highestSeverity + \"\\n\" + \"Total Anomalies: \" + $json.anomalies.length + \"\\n\\n\" + \"==================================================\\n\\n\" +  $json.anomalies.map(a => `Severity: ${a.severity} Title: ${a.title} Description: ${a.description} Evidence: ${a.evidence} Recommendation: ${a.recommendation}` ).join('\\n\\n==================================================\\n\\n') }}",
+            "Status": "Processed",
+            "Source": "Webhook",
+            "Workflow Version": "v1.0",
+            "Ai Generated At": "={{ $json.generated_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Report ID",
+              "displayName": "Report ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Ai Generated At",
+              "displayName": "Ai Generated At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Highest Severity",
+              "displayName": "Highest Severity",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Low",
+                  "value": "Low"
+                },
+                {
+                  "name": "Medium",
+                  "value": "Medium"
+                },
+                {
+                  "name": "High",
+                  "value": "High"
+                },
+                {
+                  "name": "Critical",
+                  "value": "Critical"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Executive Summary",
+              "displayName": "Executive Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Anomaly Count",
+              "displayName": "Anomaly Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Detailed Findings",
+              "displayName": "Detailed Findings",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Processed",
+                  "value": "Processed"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Created",
+              "displayName": "Created",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Attachment Summary",
+              "displayName": "Attachment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Workflow Version",
+              "displayName": "Workflow Version",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        928,
+        16
+      ],
+      "id": "4e3f551d-fe60-43fc-bc95-ee205728d7d8",
+      "name": "Archive Report: Medium Severity",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "l0ZeudbfWkzyXQJW",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appt4cu3vhAZbEuzd",
+          "mode": "list",
+          "cachedResultName": "Finance Intelligence Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblEoNbUmh5wcD9mP",
+          "mode": "list",
+          "cachedResultName": "Analysis Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd/tblEoNbUmh5wcD9mP"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Anomaly Count": "={{ $json.anomalies.length }}",
+            "Highest Severity": "={{ $json.highestSeverity.charAt(0).toUpperCase() + $json.highestSeverity.slice(1) }}",
+            "Executive Summary": "={{ $json.executive_summary }}",
+            "Detailed Findings": "={{ \"Finance Intelligence Report\\n\\n\" + \"Highest Severity: \" + $json.highestSeverity + \"\\n\" + \"Total Anomalies: \" + $json.anomalies.length + \"\\n\\n\" + \"==================================================\\n\\n\" +  $json.anomalies.map(a => `Severity: ${a.severity} Title: ${a.title} Description: ${a.description} Evidence: ${a.evidence} Recommendation: ${a.recommendation}` ).join('\\n\\n==================================================\\n\\n') }}",
+            "Status": "Processed",
+            "Source": "Webhook",
+            "Workflow Version": "v1.0",
+            "Ai Generated At": "={{ $json.generated_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Report ID",
+              "displayName": "Report ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Ai Generated At",
+              "displayName": "Ai Generated At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Highest Severity",
+              "displayName": "Highest Severity",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Low",
+                  "value": "Low"
+                },
+                {
+                  "name": "Medium",
+                  "value": "Medium"
+                },
+                {
+                  "name": "High",
+                  "value": "High"
+                },
+                {
+                  "name": "Critical",
+                  "value": "Critical"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Executive Summary",
+              "displayName": "Executive Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Anomaly Count",
+              "displayName": "Anomaly Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Detailed Findings",
+              "displayName": "Detailed Findings",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Processed",
+                  "value": "Processed"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Created",
+              "displayName": "Created",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Attachment Summary",
+              "displayName": "Attachment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Workflow Version",
+              "displayName": "Workflow Version",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        928,
+        192
+      ],
+      "id": "45726ca7-56d6-45ff-af28-41a9dc221a43",
+      "name": "Archive Report: Low Severity",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "l0ZeudbfWkzyXQJW",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appt4cu3vhAZbEuzd",
+          "mode": "list",
+          "cachedResultName": "Finance Intelligence Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblidPi1k5f7MacW1",
+          "mode": "list",
+          "cachedResultName": "Audit Trail",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd/tblidPi1k5f7MacW1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Event": "Analysis Completed",
+            "Status": "Success",
+            "Details": "={{ $('Switch').item.json.anomalies.length }} anomalies detected",
+            "Source": "={{ $('Webhook').item.json.headers['user-agent'] }}",
+            "Workflow Version": "v1.0"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Audit ID",
+              "displayName": "Audit ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Event",
+              "displayName": "Event",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Success",
+                  "value": "Success"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                },
+                {
+                  "name": "Warning",
+                  "value": "Warning"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Details",
+              "displayName": "Details",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Workflow Version",
+              "displayName": "Workflow Version",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Attachment Summary",
+              "displayName": "Attachment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        16
+      ],
+      "id": "c3ec33d6-8ff9-4794-8da3-f508ff2561ba",
+      "name": "Update Audit Trail: Medium Severity",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "l0ZeudbfWkzyXQJW",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appt4cu3vhAZbEuzd",
+          "mode": "list",
+          "cachedResultName": "Finance Intelligence Reports",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblidPi1k5f7MacW1",
+          "mode": "list",
+          "cachedResultName": "Audit Trail",
+          "cachedResultUrl": "https://airtable.com/appt4cu3vhAZbEuzd/tblidPi1k5f7MacW1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Event": "Analysis Completed",
+            "Status": "Success",
+            "Details": "={{ $('Switch').item.json.anomalies.length }} anomalies detected",
+            "Source": "={{ $('Webhook').item.json.headers['user-agent'] }}",
+            "Workflow Version": "v1.0"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Audit ID",
+              "displayName": "Audit ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Event",
+              "displayName": "Event",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Success",
+                  "value": "Success"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                },
+                {
+                  "name": "Warning",
+                  "value": "Warning"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Details",
+              "displayName": "Details",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Workflow Version",
+              "displayName": "Workflow Version",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Attachment Summary",
+              "displayName": "Attachment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        192
+      ],
+      "id": "479949ff-4ad3-42ff-a096-f38c33c781ea",
+      "name": "Update Audit Trail: Low Severity",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "l0ZeudbfWkzyXQJW",
+          "name": "Airtable account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Archive Report: Processing Failures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Archive Report: Critical Severity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Archive Report: High Severity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Archive Report: Medium Severity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Archive Report: Low Severity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        []
+      ]
+    },
+    "Send an Email": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email1": {
+      "main": [
+        []
+      ]
+    },
+    "Archive Report: High Severity": {
+      "main": [
+        [
+          {
+            "node": "Update Audit Trail: High Severity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Report: Critical Severity": {
+      "main": [
+        [
+          {
+            "node": "Update Audit Trail: Critical Severity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email2": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Report: Processing Failures": {
+      "main": [
+        [
+          {
+            "node": "Update Audit Trail: Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Audit Trail: Fail": {
+      "main": [
+        [
+          {
+            "node": "Send an Email2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Audit Trail: Critical Severity": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Audit Trail: High Severity": {
+      "main": [
+        [
+          {
+            "node": "Send an Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Report: Medium Severity": {
+      "main": [
+        [
+          {
+            "node": "Update Audit Trail: Medium Severity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Report: Low Severity": {
+      "main": [
+        [
+          {
+            "node": "Update Audit Trail: Low Severity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9650ce83-29cd-4f1b-af53-4bd119075d21",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "61218c73c4273bfbe002bd132cfaf66afd0401dbdb756cd1450b33eb8c9c77f1"
+  },
+  "nodeGroups": [],
+  "id": "JGuHoMq1WiBcYbUc",
+  "tags": []
+}

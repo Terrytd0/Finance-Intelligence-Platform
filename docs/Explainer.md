@@ -1,6 +1,6 @@
 # Explainer
 
-**Date:** 2026-07-19 (last updated 2026-07-20)
+**Date:** 2026-07-19 (last updated 2026-07-21)
 
 ## What this covers
 
@@ -318,3 +318,151 @@ protocol with no concrete implementation yet. Wiring an actual OpenAI or
 Anthropic client, an n8n node to invoke `generate_anomaly_report()`,
 Airtable storage, and notifications are all still open, per
 `docs/architecture.md` and `docs/decisions.md`.
+
+## Update (2026-07-21): Production API layer, OpenAI integration, logging, retries, and error handling
+
+This closes the biggest gap the previous update left open: nothing called
+a real LLM, and there was no HTTP entry point into the pipeline at all.
+This update adds a FastAPI service that orchestrates the existing
+ingestion → KPI → AI stages end-to-end, a concrete `OpenAILLMClient`
+implementing the `LLMClient` protocol from `src/ai/anomaly_detector.py`,
+and the production concerns (config, logging, retries, structured error
+responses) needed to run it. No existing business logic in `src/ingestion/`,
+`src/analytics/`, `src/ai/prompt_builder.py`, `src/ai/anomaly_detector.py`,
+or `src/models/` was modified — this only adds an orchestration and
+provider layer on top.
+
+Expected flow: `CSV → FastAPI → Pipeline → KPI Engine → Prompt Builder →
+OpenAILLMClient → OpenAI → Anomaly Detector → JSON Response`.
+
+### `src/config.py`
+
+- **`Settings`** — Frozen dataclass holding `openai_api_key`,
+  `openai_model`, `openai_timeout`, `openai_temperature`,
+  `openai_retry_count`, `log_level`. `get_settings()` (`functools.lru_cache`)
+  loads it once from environment variables (`OPENAI_API_KEY`,
+  `OPENAI_MODEL`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_TEMPERATURE`,
+  `OPENAI_RETRY_COUNT`, `LOG_LEVEL`) with sensible defaults for everything
+  except the API key, which has no default and no hardcoded fallback.
+
+### `src/logging_config.py`
+
+- **`configure_logging()`** — Idempotent (safe to call at module import
+  time); attaches a console `StreamHandler` and a
+  `RotatingFileHandler` (`logs/app.log`, 5 MB × 3 backups) to the root
+  logger, both using one format string:
+  `%(asctime)s | %(levelname)-8s | %(name)s | %(message)s`. Level comes
+  from `Settings.log_level`.
+
+### `src/ai/openai_client.py`
+
+- **`OpenAILLMClient`** — Implements `complete(prompt: str) -> str`
+  against the official `openai` SDK, so it drops directly into
+  `generate_anomaly_report()`'s `llm_client` parameter with no changes to
+  `anomaly_detector.py`. Model, timeout, temperature, and retry count all
+  default to `Settings` but can be overridden per instance.
+  - Retries only transient failures — `APIConnectionError`,
+    `APITimeoutError`, `RateLimitError`, `InternalServerError` (the SDK's
+    5xx class) — with exponential backoff (1s, 2s, 4s, ...), logging a
+    warning before each retry. Any other `APIError` (bad request, auth
+    failure, ...) raises immediately without retrying, since retrying
+    those can't succeed.
+  - After the final failed attempt: raises `OpenAITimeoutError` if the
+    last failure was a timeout, otherwise `OpenAIRequestError`.
+  - A response with no choices or empty content raises
+    `OpenAIResponseError` immediately, never retried — per the brief,
+    parsing/shape errors aren't network failures.
+  - Missing `OPENAI_API_KEY` raises `OpenAIConfigurationError` at
+    construction time rather than failing on first use.
+  - All four exceptions above subclass `OpenAIClientError`, so callers
+    that just want "did the OpenAI integration fail" can catch one type.
+
+### `src/api/`
+
+- **`src/api/main.py`** — `GET /health` returns `{"status": "ok"}`.
+  `POST /analyze` accepts an uploaded file, rejects anything but `.csv`,
+  writes it to a temp file, and runs it through the **unmodified**
+  `run_pipeline()` → `generate_kpis()` → `generate_anomaly_report()`
+  chain, returning the result as `AnomalyReportResponse` JSON. The LLM
+  client is obtained through a `get_llm_client()` FastAPI dependency
+  (constructs `OpenAILLMClient` from `Settings`) rather than being
+  instantiated inline, so tests can override it with a fake and never
+  touch the network.
+- **`src/api/errors.py`** — `APIError` base class (`status_code`,
+  `error_type`) plus six subclasses (`InvalidFileError` 400,
+  `CSVProcessingError` 400, `ValidationFailedError` 422,
+  `AnomalyGenerationError` 502, `OpenAIServiceError` 502 /
+  `OpenAITimeoutServiceError` 504, `ConfigurationError` 500).
+  `register_exception_handlers()` wires an `APIError` handler (returns
+  `{"error": <type>, "message": <str>}`) and a catch-all `Exception`
+  handler that logs the real traceback server-side but returns a generic
+  `{"error": "InternalServerError", "message": "An unexpected error
+  occurred."}` to the caller — no raw traceback or internal exception
+  text ever reaches the client.
+- **`src/api/schemas.py`** — `FinancialAnomalyResponse` /
+  `AnomalyReportResponse` Pydantic models with `from_domain()`
+  constructors that copy field-for-field from the existing
+  `FinancialAnomaly` / `AnomalyReport` dataclasses. Exists only for JSON
+  serialization and OpenAPI docs; holds no logic of its own.
+
+### Error mapping in `/analyze`
+
+| Situation | Exception raised | HTTP status |
+|---|---|---|
+| Upload isn't `.csv` | `InvalidFileError` | 400 |
+| Pipeline can't read the file (e.g. bad encoding) | `CSVProcessingError` | 400 |
+| Every row fails validation | `ValidationFailedError` | 422 |
+| LLM response isn't valid/schema-matching JSON | `AnomalyGenerationError` | 502 |
+| OpenAI request fails after retries exhausted | `OpenAIServiceError` | 502 |
+| OpenAI request times out on every attempt | `OpenAITimeoutServiceError` | 504 |
+| Missing `OPENAI_API_KEY` | `ConfigurationError` | 500 |
+| Anything else unhandled | generic handler | 500 |
+
+### `requirements.txt`
+
+Added `fastapi`, `uvicorn[standard]`, `python-multipart` (required by
+FastAPI to parse the multipart file upload in `/analyze`), `openai`, and
+`httpx` (only needed because `fastapi.testclient.TestClient` requires it).
+`openpyxl` and everything else already there was left untouched.
+
+### `tests/`
+
+- **`tests/test_openai_client.py`** (11 tests) — `openai.OpenAI` is
+  mocked via `unittest.mock.patch`; no network access needed or possible.
+  Covers: success; missing API key; a transient failure followed by
+  success; backoff delays are exactly `[1.0, 2.0]` for two retries;
+  retries exhausted raises `OpenAIRequestError`; timeouts exhausted raise
+  `OpenAITimeoutError` instead; a 5xx (`InternalServerError`) is retried;
+  a non-retryable error (`BadRequestError`) raises immediately with zero
+  retries/sleeps; empty response content and a response with no choices
+  both raise `OpenAIResponseError` without retrying; all four custom
+  exceptions subclass `OpenAIClientError`.
+- **`tests/test_api.py`** (9 tests) — Uses `fastapi.testclient.TestClient`
+  and a `FakeLLMClient` injected via `app.dependency_overrides[get_llm_client]`
+  (cleared after every test by an `autouse` fixture), so no test makes a
+  real OpenAI call. Covers: `/health`; a full successful `/analyze` run
+  against real ingestion/KPI code with only the LLM call faked; rejecting
+  a `.txt` upload; a CSV with invalid UTF-8 bytes; a CSV where every row
+  fails validation; a malformed (non-JSON) LLM response; an
+  `OpenAITimeoutError` mapping to 504; an `OpenAIRequestError` mapping to
+  502; and an arbitrary unhandled exception mapping to a scrubbed 500
+  response that contains neither the original exception message nor the
+  word "Traceback".
+  - Note: `TestClient` re-raises server exceptions by default even when a
+    custom `Exception` handler is registered, so the 500 test needs
+    `TestClient(app, raise_server_exceptions=False)` to actually observe
+    the handler's response instead of the raw exception.
+
+All 65 tests in the suite pass (`python -m pytest -q`): the 45 from the
+previous update plus these 11 and 9.
+
+### What this still doesn't do
+
+`/analyze` only accepts `.csv` uploads, even though `src/ingestion/reader.py`
+already supports `.xlsx` — restricted to match the brief ("accept uploaded
+CSV files"); widening it to `.xlsx` is a one-line change to
+`ALLOWED_UPLOAD_SUFFIXES` in `src/api/main.py` if wanted. There's no
+authentication/authorization on the API, no rate limiting, and no
+`Dockerfile`/deployment config. `data/processed/` storage, Airtable, n8n
+orchestration, and notifications remain open per `docs/architecture.md`
+and `docs/decisions.md`, unchanged by this update.

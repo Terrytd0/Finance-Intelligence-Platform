@@ -1,0 +1,4 @@
+transaction_id,client_id,date,category,description,amount,currency
+T5001,C001,2026-01-10,revenue,Consulting income,125000.00,USD
+T5002,C001,2026-01-12,expense,Office supplies,not-a-number,USD
+T5003,C001,2026-01-15,expense,Rent,-8500.00,USD
