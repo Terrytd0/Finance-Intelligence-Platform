@@ -105,9 +105,16 @@ Version 1 of the platform processes:
 - Structured JSON error responses with no raw tracebacks exposed
   (`src/api/errors.py`)
 - Console + rotating file logging (`src/logging_config.py`)
-- Audit trail
+- Audit trail and per-severity workflow branching (n8n)
 - Email & Slack notifications
-- Scalable workflow architecture
+
+The current architecture runs as a single FastAPI instance processing one
+upload per request — appropriate for the MVP's validated use case, but not
+yet proven at production volume. See
+[`docs/performance-optimization.md`](docs/performance-optimization.md) and
+[`docs/scalability-10k-records-per-day.md`](docs/scalability-10k-records-per-day.md)
+for an honest accounting of current bottlenecks versus what horizontal
+scaling would require.
 
 ## Future Enhancements
 
@@ -115,8 +122,20 @@ Version 1 of the platform processes:
 - Scheduled report generation
 - Multi-company support
 - Predictive forecasting
-- Role-based access
-- Approval workflows
+- Role-based access — design specified in
+  [`docs/role-based-access-design.md`](docs/role-based-access-design.md);
+  not yet implemented (no authentication exists in `src/api/` today)
+- Approval workflows — report sign-off flow specified in
+  [`docs/role-based-access-design.md`](docs/role-based-access-design.md#approval-workflow-and-report-status);
+  not yet implemented
+- Batch processing — architecture specified in
+  [`docs/batch-processing.md`](docs/batch-processing.md); uploads are
+  processed one file per request today
+- Enterprise-scale throughput (10,000+ records/day) — gap analysis and
+  roadmap in
+  [`docs/scalability-10k-records-per-day.md`](docs/scalability-10k-records-per-day.md)
+- Centralized monitoring & observability — current capabilities and gaps
+  documented in [`docs/monitoring-metrics.md`](docs/monitoring-metrics.md)
 - ERP integrations (SAP, Oracle, Dynamics)
 
 ## Repository Structure
@@ -134,11 +153,16 @@ Finance-Intelligence-Platform/
 ├── docs/
 │   ├── architecture.md
 │   ├── assumptions_and_open_questions.md
+│   ├── batch-processing.md
 │   ├── business_requirements.md
+│   ├── data_schema.md
 │   ├── decisions.md
 │   ├── design_review.md
-│   ├── data_schema.md
 │   ├── Explainer.md
+│   ├── monitoring-metrics.md
+│   ├── performance-optimization.md
+│   ├── role-based-access-design.md
+│   ├── scalability-10k-records-per-day.md
 │   ├── validation_rules.md
 │   └── screenshots/
 │
@@ -305,4 +329,24 @@ Logging stages from the Proposed Solution above:
 
 This workflow is the consumer of the API layer above — `src/api/` and
 `n8n/` are designed to be run together, not as alternatives.
+
+## Design & Operations Documentation
+
+Beyond the pipeline docs referenced above, `docs/` contains a set of
+enterprise architecture reviews. Each one inspects the current
+implementation directly, distinguishes what's built from what's proposed,
+and is explicit that the proposals are **not** implemented:
+
+| Document | Covers | Status |
+| --- | --- | --- |
+| [`docs/role-based-access-design.md`](docs/role-based-access-design.md) | Roles, permissions, report approval, and alert routing | Design only — no authentication exists in `src/api/` today |
+| [`docs/performance-optimization.md`](docs/performance-optimization.md) | Optimizations already in the pipeline vs. enterprise-scale recommendations | Mixed — documents both what's implemented and what's proposed |
+| [`docs/batch-processing.md`](docs/batch-processing.md) | How uploads are processed today and how batch processing could be introduced | Design only — uploads are single-file, single-request today |
+| [`docs/scalability-10k-records-per-day.md`](docs/scalability-10k-records-per-day.md) | Current scalability constraints and a roadmap toward 10,000+ records/day | Design only — this volume has not been load-tested or achieved |
+| [`docs/monitoring-metrics.md`](docs/monitoring-metrics.md) | Current logging/audit visibility vs. a centralized observability architecture | Mixed — documents both what's implemented and what's proposed |
+
+None of these documents change the underlying pipeline described above
+(`Read → Validate → Clean → Dedupe → KPI Engine → AI → Store → Notify`);
+each treats its proposed architecture as an extension of it, not a
+replacement.
 
