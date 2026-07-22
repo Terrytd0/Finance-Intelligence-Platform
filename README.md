@@ -1,5 +1,12 @@
 # Finance Intelligence Platform
 
+![Python](https://img.shields.io/badge/Python-3.11-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
+![Pytest](https://img.shields.io/badge/Pytest-65%20Tests-success)
+![OpenAI](https://img.shields.io/badge/LLM-OpenAI-lightgrey)
+![n8n](https://img.shields.io/badge/n8n-Workflow-orange)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
 ## Executive Summary
 
 **Client:** Horizon Capital Partners
@@ -9,6 +16,38 @@ ingestion, validation, analysis, and reporting of financial data. It is being
 built for Horizon Capital Partners to cut daily analyst workload from hours to
 minutes while preserving the accuracy and auditability required in a finance
 context.
+
+## Requirements
+
+- Python 3.11+
+- OpenAI API key
+- n8n (for workflow orchestration)
+- Airtable account and base
+- Slack workspace (optional, for notifications)
+
+## Quick Start
+
+```bash
+git clone https://github.com/Terrytd0/Finance-Intelligence-Platform.git
+
+cd Finance-Intelligence-Platform
+
+python -m venv .venv
+
+pip install -r requirements.txt
+
+uvicorn src.api.main:app --reload
+```
+
+Open your browser:
+
+http://127.0.0.1:8000/docs
+
+Upload:
+
+data/sample/valid_transactions.csv
+
+Click Execute.
 
 ## Business Problem
 
@@ -45,7 +84,7 @@ behavior stays explainable and easy to validate against current practice:
 1. **Ingestion** — pull in raw financial data from source systems/spreadsheets
 2. **Validation** — check data quality and flag issues before they propagate
 3. **KPI Calculation** — compute the same metrics analysts calculate today
-4. **Anomaly Detection** — flag values outside predefined business thresholds.
+4. **Anomaly Detection** — AI analyzes the calculated KPIs and transaction data to identify unusual financial patterns and generate structured anomaly reports.
 5. **Executive Reporting** — generate summaries suited for decision-makers
 6. **Notifications** — distribute reports/alerts to reviewers automatically who then send to stakeholders once approved.
 7. **Audit Logging** — record how each figure and conclusion was derived, for traceability
@@ -65,6 +104,12 @@ ingestion through validation, KPI calculation, and anomaly detection, into
 reporting and notification, with audit logging running alongside every stage
 to keep the process traceable end to end.
 
+### Workflow Architecture
+
+See the workflow implemented in n8n:
+
+![Workflow](n8n-workflow.png)
+
 ## Technology Stack
 
 _Full stack decisions and their trade-offs are recorded in
@@ -76,8 +121,15 @@ so far, driven directly by what's implemented in `src/`:_
   provider behind anomaly detection; swappable, since `src/ai/anomaly_detector.py`
   only depends on the provider-agnostic `LLMClient` protocol.
 - **openpyxl** — `.xlsx` ingestion.
-- Everything else (storage, notifications, hosting) remains open per
-  `docs/decisions.md`.
+- **n8n** — workflow orchestration in front of the FastAPI backend
+  ([ADR-001](docs/decisions.md), [`n8n/`](n8n/)).
+- **Airtable** — report archive and audit-trail storage, written from the
+  n8n workflow (MVP-scale; see
+  [`docs/scalability-10k-records-per-day.md`](docs/scalability-10k-records-per-day.md)
+  for its long-term limits).
+- **Slack / Email (Gmail)** — severity-routed stakeholder notifications,
+  sent from the n8n workflow.
+- Hosting/deployment remains open per `docs/decisions.md`.
 
 ## Supported Financial Data
 
@@ -153,18 +205,18 @@ Finance-Intelligence-Platform/
 ├── docs/
 │   ├── architecture.md
 │   ├── assumptions_and_open_questions.md
+│   ├── automated-test-coverage.md
 │   ├── batch-processing.md
-│   ├── business_requirements.md
+│   ├── Business_Requirements.md
 │   ├── data_schema.md
 │   ├── decisions.md
 │   ├── design_review.md
-│   ├── Explainer.md
 │   ├── monitoring-metrics.md
 │   ├── performance-optimization.md
 │   ├── role-based-access-design.md
 │   ├── scalability-10k-records-per-day.md
-│   ├── validation_rules.md
-│   └── screenshots/
+│   ├── test-scenarios.md
+│   └── validation_rules.md
 │
 ├── data/
 │   ├── raw/
@@ -172,7 +224,7 @@ Finance-Intelligence-Platform/
 │   │   ├── transactions.xlsx
 │   │   └── clients.csv
 │   │
-│   ├── processed/
+│   ├── processed/          (pipeline output, gitignored)
 │   │
 │   └── sample/
 │       ├── valid_transactions.csv
@@ -180,7 +232,10 @@ Finance-Intelligence-Platform/
 │       ├── missing_values.csv
 │       ├── invalid_data.csv
 │       ├── lowercase_currency.csv
-│       └── whitespace_values.csv
+│       ├── whitespace_values.csv
+│       ├── malformed.csv
+│       ├── partial_invalid.csv
+│       └── Empty.csv
 │
 ├── src/
 │   ├── __init__.py
@@ -188,7 +243,7 @@ Finance-Intelligence-Platform/
 │   ├── logging_config.py
 │   │
 │   ├── ingestion/
-│   │   ├──  __init__.py
+│   │   ├── __init__.py
 │   │   ├── reader.py
 │   │   ├── validator.py
 │   │   ├── cleaner.py
@@ -211,7 +266,7 @@ Finance-Intelligence-Platform/
 │   │   └── schemas.py
 │   │
 │   └── models/
-│       ├──  __init__.py
+│       ├── __init__.py
 │       └── financial_schema.py
 │
 ├── tests/
@@ -228,11 +283,30 @@ Finance-Intelligence-Platform/
 │   ├── README.md
 │   └── Finance-Intelligence-Pipeline.json
 │
-├── workflows/
+├── workflows/             (placeholder — reserved for future exported workflow variants)
 │
 ├── assets/
+│   ├── airtable/
+│   │   ├── Analysis Report Table.png
+│   │   ├── Anomaly Report n8n structured Output.png
+│   │   ├── Audit Trail Table.png
+│   │   └── Processing Failure Table.png
+│   │
+│   ├── api/
+│   │   ├── Anomaly Report Swagger Output.png
+│   │   └── Health Check.png
+│   │
+│   ├── architecture/
+│   │   └── n8n workflow.png
+│   │
+│   ├── notifications/
+│   │   ├── Automated Email.png
+│   │   └── Automated Slack Alert.png
+│   │
+│   └── testing/
+│       └── Retry Handling.png
 │
-└── examples/
+└── examples/              (placeholder — reserved for future sample end-to-end runs)
 ```
 
 The `src/ingestion` pipeline (Read → Validate → Clean → Deduplicate) is a
@@ -306,9 +380,6 @@ OpenAILLMClient → OpenAI → Anomaly Detector → JSON Response
   `{"error": "<Type>", "message": "<detail>"}` with an appropriate HTTP
   status code — never a raw Python traceback.
 
-See [`docs/Explainer.md`](docs/Explainer.md) (2026-07-21 update) for the
-full error-mapping table and design rationale.
-
 ## Workflow Orchestration (n8n)
 
 Per [ADR-001](docs/decisions.md), n8n is the orchestration platform sitting
@@ -330,6 +401,38 @@ Logging stages from the Proposed Solution above:
 This workflow is the consumer of the API layer above — `src/api/` and
 `n8n/` are designed to be run together, not as alternatives.
 
+## Testing
+
+The automated suite covers every module in `src/` end to end — ingestion,
+KPI calculation, prompt building, AI response parsing, the OpenAI client's
+retry/backoff behavior, and the FastAPI endpoints — with no test making a
+real network call (LLM calls are faked or mocked throughout):
+
+```
+python -m pytest -q
+# 65 passed
+```
+
+- [`docs/automated-test-coverage.md`](docs/automated-test-coverage.md) —
+  per-test breakdown of what feature each test covers and what scenario it
+  verifies, for all 6 files in `tests/`.
+- [`docs/test-scenarios.md`](docs/test-scenarios.md) — manual, end-to-end
+  scenarios (CSV/XLSX upload, validation failures, OpenAI timeout retries,
+  the health endpoint) exercised through the Swagger UI and the full n8n
+  workflow, as a complement to the automated suite above.
+
+## Screenshots
+
+Evidence of the platform running end-to-end, captured from the sample
+data in `data/` and the imported n8n workflow. Full-resolution originals
+are organized by area under [`assets/`](assets/).
+
+| | |
+| --- | --- |
+| ![n8n-workflow](assets/architecture/n8n-workflow.png) **n8n workflow** — the imported pipeline, from `Webhook` through severity-based routing to Airtable and Slack/Email. | ![Health-check](assets/api/Health-Check.png) **`GET /health`** — liveness check via the FastAPI Swagger UI. |
+| ![Anomaly-report-Swagger-output](assets/api/Anomaly-Report-Swagger-Output.png) **`POST /analyze` response** — a full `AnomalyReport` returned from the Swagger UI. | ![Analysis-report-table](assets/airtable/Analysis-Report-Table.png) **Airtable — Analysis Report** — an archived report row per the n8n Data Storage stage. |
+| ![Automated-Slack-alert](assets/notifications/Automated-Slack-Alert.png) **Slack notification** — a severity-routed alert sent by the n8n workflow. | ![Retry handling](assets/testing/Retry-Handling.png) **Retry handling** — `OpenAILLMClient` retrying a transient OpenAI failure with exponential backoff. |
+
 ## Design & Operations Documentation
 
 Beyond the pipeline docs referenced above, `docs/` contains a set of
@@ -349,4 +452,13 @@ None of these documents change the underlying pipeline described above
 (`Read → Validate → Clean → Dedupe → KPI Engine → AI → Store → Notify`);
 each treats its proposed architecture as an extension of it, not a
 replacement.
+
+Project history and standing decisions, for how the above came to be:
+
+| Document | Covers | Status |
+| --- | --- | --- |
+| [`docs/Business_Requirements.md`](docs/Business_Requirements.md) | The original business problem and requirements from Horizon Capital Partners | Source requirements |
+| [`docs/design_review.md`](docs/design_review.md) | A pre-build architecture review (2026-07-18) — gaps, risks, and recommendations against the requirements and `decisions.md` | Historical — **APPROVED WITH RECOMMENDATIONS**; several recommendations (e.g. deterministic anomaly detection ahead of the LLM step) remain open, see [`docs/architecture.md`](docs/architecture.md#anomaly-detection-approach) |
+| [`docs/assumptions_and_open_questions.md`](docs/assumptions_and_open_questions.md) | Open questions raised before implementation began (definition of "anomaly," data volume, approval ownership, accuracy target) | Still open — not yet answered by the client |
+| [`docs/decisions.md`](docs/decisions.md) | Architecture Decision Records | ADR-001 (n8n) accepted; no ADR yet for OpenAI or Airtable, a gap `design_review.md` flags |
 
