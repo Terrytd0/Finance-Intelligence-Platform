@@ -203,6 +203,9 @@ Finance-Intelligence-Platform/
 ├── conftest.py
 │
 ├── docs/
+│   ├── Case-Study+Technical-Architecture/
+│   │   ├── Finance-Intelligence-Platform-Case-Study.pdf
+│   │   └── Finance-Intelligence-Platform-Technical-Architecture.pdf
 │   ├── architecture.md
 │   ├── assumptions_and_open_questions.md
 │   ├── automated-test-coverage.md
